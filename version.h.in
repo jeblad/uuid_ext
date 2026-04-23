@@ -1,0 +1,6 @@
+#pragma once
+
+/**
+ * Automatically generated version header
+ */
+#define UUID_EXT_VERSION "@UUID_EXT_VERSION@"

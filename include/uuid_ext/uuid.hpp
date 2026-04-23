@@ -41,6 +41,10 @@ class UUID {
       // Get the raw 128-bit value
       unsigned __int128 get() const;
 
+      // Returns the library version string
+      // (e.g. "1.0.abc1234-dirty" if there are uncommitted changes)
+      static std::string version_string();
+
       // Returns true if the UUID is all zeros (nil)
       bool is_nil() const;
 

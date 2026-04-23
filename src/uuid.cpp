@@ -11,6 +11,7 @@
  **/
 
 #include "uuid_ext/uuid.hpp"
+#include "uuid_ext/version.h"
 #include <algorithm>
 #include <cstdint>
 #include <map>
@@ -169,6 +170,13 @@ UUID::UUID(unsigned __int128 val) : value_(val) {}
  */
 unsigned __int128 UUID::get() const {
     return value_;
+}
+
+/**
+ * @brief Returns the version of the library.
+ */
+std::string UUID::version_string() {
+    return UUID_EXT_VERSION;
 }
 
 /**
