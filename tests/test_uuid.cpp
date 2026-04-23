@@ -5,6 +5,9 @@
 void test_heuristics() {
     using uuid_ext::UUID;
 
+    // Verify Versioning
+    std::cout << "Library Version: " << UUID::version_string() << std::endl;
+
     // Test Standard Hex (32 chars)
     std::string hex_raw = "550e8400e29b41d4a716446655440000";
     auto u1 = UUID::parse(hex_raw);
