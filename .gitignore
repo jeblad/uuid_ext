@@ -1,3 +1,18 @@
+# Build directory
+[bB][uU][iI][lL][dD]/
+_deps/
+
+# vscode
+.[vV][sS][cC]ode/
+
+# cmake
+CMakeCache.txt
+
+# backup
+*.old
+*.backup
+*~
+
 # Prerequisites
 *.d
 
