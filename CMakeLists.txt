@@ -5,6 +5,7 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 configure_file(version.h.in include/uuid_ext/version.h)
+configure_file(version.md.in ${CMAKE_CURRENT_SOURCE_DIR}/VERSION.md @ONLY)
 
 add_library(uuid_ext src/uuid.cpp)
 set_target_properties(uuid_ext PROPERTIES POSITION_INDEPENDENT_CODE ON)
