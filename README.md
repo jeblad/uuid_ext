@@ -30,6 +30,38 @@ Base64 padding (`=`) and certain special characters (like `+` and `/`) are often
 
 By focusing on unpadded and "clean" alphanumeric-heavy representations, `uuid_ext` ensures that generated strings are safe for use in filenames, URLs, and terminal commands without additional escaping.
 
+## Usage
+```cpp
+#include "uuid_ext/uuid.hpp"
+#include <iostream>
+
+int main() {
+    using uuid_ext::UUID;
+
+    // Create a UUID from a standard hex string
+    UUID u1("550e8400-e29b-41d4-a716-446655440000");
+
+    // Heuristically parse various formats (Hex, Base32, Base36, Base64)
+    // This identifies the format based on the string length.
+    UUID u2 = UUID::parse("17Y9G6X8W4Q2Z0V4B8N6M4L2K"); // Base36
+
+    // Convert to different representations
+    std::cout << "Standard: " << u1.to_string() << std::endl;
+    std::cout << "Base36:   " << u1.to_base_string("base36") << std::endl;
+    std::cout << "Base64:   " << u1.to_base_string("rfc4648-4") << std::endl;
+
+    // Check properties
+    std::cout << "Version: " << (int)u1.version() << std::endl;
+
+    // Comparison
+    if (u1 != u2) {
+        std::cout << "UUIDs are different" << std::endl;
+    }
+
+    return 0;
+}
+```
+
 ## Building and testing
 This project uses CMake for its build system.
 
@@ -43,7 +75,7 @@ To run the included unit tests, use CTest after building:
 
 ```bash
 cd build
-ctest --verbose
+( cd build ; ctest --verbose )
 ```
 
 ## License
