@@ -1,5 +1,5 @@
 # uuid_ext
-A portable C++20 library for handling, formatting, and heuristically parsing UUIDs.
+A portable C++11 library for handling, formatting, and heuristically parsing UUIDs.
 
 ## Overview
 `uuid_ext` provides a `UUID` class backed by an `unsigned __int128` for efficient internal storage. It is designed to bridge the gap between various UUID representations, including standard hyphenated Hex, compact Hex, Base32, Base36, Base62, and Base64.
@@ -8,7 +8,7 @@ A portable C++20 library for handling, formatting, and heuristically parsing UUI
 - **Multi-base support**: Convert UUIDs to and from Base16, Base32 (RFC 4648), Base36, Base62, and Base64.
 - **Heuristic Parsing**: A `parse()` method that guesses the encoding based on string length and character content.
 - **Clean API**: Supports introspection (version/variant), byte array export, and comparison operators.
-- **Zero External Dependencies**: Only requires a standard C++20 compiler.
+- **Zero External Dependencies**: Only requires a standard C++11 compiler.
 
 ## Heuristic Parsing Logic
 The `parse()` method attempts to identify the format based on the following length-based rules:
