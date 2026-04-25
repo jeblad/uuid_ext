@@ -30,12 +30,20 @@ Base64 padding (`=`) and certain special characters (like `+` and `/`) are often
 
 By focusing on unpadded and "clean" alphanumeric-heavy representations, `uuid_ext` ensures that generated strings are safe for use in filenames, URLs, and terminal commands without additional escaping.
 
-## Building
-The library uses CMake.
+## Building and testing
+This project uses CMake for its build system.
 
 ```bash
 cmake -B build
 cmake --build build
+build/
+```
+
+To run the included unit tests, use CTest after building:
+
+```bash
+cd build
+ctest --verbose
 ```
 
 ## License
