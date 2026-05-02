@@ -84,6 +84,14 @@ The parse() method attempts to identify the format based on the following length
 
 ## Building and Testing
 
+### Development Dependencies
+
+This project uses `commit-and-tag-version` to automate versioning via Git hooks. If you are contributing, ensure you have Node.js installed and run:
+
+```bash
+npm install -g commit-and-tag-version
+```
+
 This project uses CMake for its build system.
 
 ```bash
