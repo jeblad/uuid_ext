@@ -442,7 +442,7 @@ inline UUID UUID::parse(const std::string& s, bool use_heuristics, const std::st
     }
 
     if (candidates.empty()) return UUID();
-    if (candidates.size() == 1) return from_base_string(s, candidates[0]);
+    if (candidates.size() == 1) return UUID::from_base_string(s, candidates[0]);
 
     if (use_heuristics) {
         // Heuristic 1: Exclusive characters
@@ -463,7 +463,7 @@ inline UUID UUID::parse(const std::string& s, bool use_heuristics, const std::st
                     count++;
                 }
             }
-            if (count == 1) return from_base_string(s, winner);
+            if (count == 1) return UUID::from_base_string(s, winner);
         }
 
         // Heuristic 2: Overflow/High-bit check
@@ -471,14 +471,14 @@ inline UUID UUID::parse(const std::string& s, bool use_heuristics, const std::st
         std::ranges::copy_if(candidates, std::back_inserter(valid), [&s](const std::string& cand_id) {
             return !UUID::from_base_string(s, cand_id).is_nil();
         });
-        if (valid.size() == 1) return from_base_string(s, valid[0]);
+        if (valid.size() == 1) return UUID::from_base_string(s, valid[0]);
         if (!valid.empty()) candidates = valid;
     }
 
     if (!default_encoding.empty()) {
         auto it = std::find_if(candidates.begin(), candidates.end(),
                               [&default_encoding](const std::string& cid) { return cid == default_encoding; });
-        if (it != candidates.end()) return from_base_string(s, *it);
+        if (it != candidates.end()) return UUID::from_base_string(s, *it);
     }
 
     return UUID();

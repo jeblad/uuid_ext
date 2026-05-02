@@ -54,8 +54,6 @@ The library is built around a few core algorithmic principles to ensure high-fid
 * **UTF-8 Decoding:** Unlike byte-oriented libraries, `uuid_ext` includes a lightweight UTF-8 decoder. It processes input strings as 32-bit Unicode code points. This allows the library to treat multibyte characters (like `Æ` or `Å`) as single semantic units during both encoding and decoding.
 * **Translation Mapping:** Before a character is looked up in an encoding's alphabet, it passes through a translation layer. This layer handles custom case-folding and character aliasing (e.g., mapping `æ` to `Æ` for a Norwegian-based identifier), allowing the library to remain robust against inconsistent human input or varied linguistic rules.
 
-This layer handles custom case-folding and character aliasing (e.g., mapping æ to Æ for a Norwegian-based identifier), allowing the library to remain robust against inconsistent human input or varied linguistic rules.
-
 ## Technical Deep Dive
 
 ### Memory and Exceptions
