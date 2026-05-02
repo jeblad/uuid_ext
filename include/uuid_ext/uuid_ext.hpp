@@ -1,0 +1,501 @@
+/**
+ * uuid_ext – A portable UUID extension library
+ * Version 0.0.0
+ *
+ * Copyright © 2026 John Erling Blad
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License.
+ * 
+ * See accompanying file LICENSE or the page at https://www.gnu.org/licenses/
+ **/
+
+#ifndef UUID_EXT_HPP
+#define UUID_EXT_HPP
+
+#include <algorithm>
+#include <array>
+#include <cstdint>
+#include <bit>
+#include <cmath>
+#include <iterator>
+#include <map>
+#include <numeric>
+#include <string_view>
+#include <string>
+#include <vector>
+
+namespace uuid_ext {
+
+namespace detail {
+
+struct Encoding {
+    std::string_view alphabet;
+    bool case_insensitive;
+    std::map<char32_t, char32_t> translations;
+    std::string_view id;
+};
+
+/**
+ * Standard ASCII case folding. Does not handle Unicode multi-byte sequences
+ * or locale-specific mappings (e.g., Norwegian Æ,Ø,Å).
+ */
+inline char to_upper(char c) noexcept {
+    if (c >= 'a' && c <= 'z') return static_cast<char>(c - ('a' - 'A'));
+    return c;
+}
+
+/**
+ * Decodes the next UTF-8 code point from a string view.
+ * Returns the code point and the number of bytes consumed.
+ */
+inline std::pair<char32_t, size_t> next_cp(std::string_view sv) noexcept {
+    if (sv.empty()) return {0, 0};
+    uint8_t first = static_cast<uint8_t>(sv[0]);
+    if (first < 0x80) return {static_cast<char32_t>(first), 1};
+    
+    size_t len = std::countl_one(first);
+    if (len < 2 || len > 4 || len > sv.size()) return {static_cast<char32_t>(first), 1};
+    
+    char32_t cp = first & (0xFF >> (len + 1));
+    cp = std::accumulate(sv.begin() + 1, sv.begin() + len, cp, [](char32_t acc, char val) {
+        return (acc << 6) | (static_cast<uint8_t>(val) & 0x3F);
+    });
+    return {cp, len};
+}
+
+/**
+ * Translates a code point based on encoding rules and translation tables.
+ */
+inline char32_t translate_cp(char32_t cp, const Encoding& enc) noexcept {
+    // 1. Check explicit translation table (User defined aliases/Unicode)
+    if (auto it = enc.translations.find(cp); it != enc.translations.end()) {
+        return it->second;
+    }
+
+    // 2. Fallback to ASCII case folding if requested
+    if (enc.case_insensitive && cp < 128) {
+        return static_cast<char32_t>(to_upper(static_cast<char>(cp)));
+    }
+    return cp;
+}
+
+/**
+ * Returns the number of UTF-8 code points in a string.
+ */
+inline size_t utf8_len(std::string_view sv) noexcept {
+    size_t count = 0;
+    std::string_view temp = sv;
+    while (!temp.empty()) {
+        auto [cp, consumed] = next_cp(temp);
+        temp.remove_prefix(consumed);
+        count++;
+    }
+    return count;
+}
+
+/**
+ * Finds the index of a code point in a UTF-8 alphabet string.
+ */
+inline size_t find_cp_index(std::string_view alphabet, char32_t target) noexcept {
+    std::string_view sv = alphabet;
+    size_t index = 0;
+    while (!sv.empty()) {
+        auto [cp, consumed] = next_cp(sv);
+        if (cp == target) return index;
+        sv.remove_prefix(consumed);
+        index++;
+    }
+    return std::string::npos;
+}
+
+/**
+ * Appends the UTF-8 representation of a code point to a string.
+ * This function triggers one or more memory allocations.
+ */
+inline void append_cp_utf8(std::string& s, char32_t cp) {
+    if (cp <= 0x7F) s += static_cast<char>(cp);
+    else if (cp <= 0x7FF) {
+        s += static_cast<char>(0xC0 | (cp >> 6));
+        s += static_cast<char>(0x80 | (cp & 0x3F));
+    } else if (cp <= 0xFFFF) {
+        s += static_cast<char>(0xE0 | (cp >> 12));
+        s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        s += static_cast<char>(0x80 | (cp & 0x3F));
+    } else {
+        s += static_cast<char>(0xF0 | (cp >> 18));
+        s += static_cast<char>(0x80 | ((cp >> 12) & 0x3F));
+        s += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
+        s += static_cast<char>(0x80 | (cp & 0x3F));
+    }
+}
+
+/**
+ * Returns the code point at a specific logical index in a UTF-8 string.
+ */
+inline char32_t get_cp_at(std::string_view alphabet, size_t index) noexcept {
+    std::string_view sv = alphabet;
+    for (size_t i = 0; i < index && !sv.empty(); ++i) {
+        auto [cp, consumed] = next_cp(sv);
+        sv.remove_prefix(consumed);
+    }
+    auto [cp, consumed] = next_cp(sv);
+    return cp;
+}
+
+/**
+ * This function triggers one or more memory allocations.
+ */
+inline const std::map<std::string, Encoding>& get_encoding_registry() {
+    static const std::map<std::string, Encoding> registry = []() {
+        std::map<std::string, Encoding> r;
+        r.emplace("rfc4648-4", Encoding{"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/", false, {}, "rfc4648-4"});
+        r.emplace("rfc4648-6", Encoding{"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567", true, {}, "rfc4648-6"});
+        r.emplace("rfc4648-7", Encoding{"0123456789ABCDEFGHIJKLMNOPQRSTUV", true, {}, "rfc4648-7"});
+        r.emplace("rfc4648-8", Encoding{"0123456789ABCDEF", true, {}, "rfc4648-8"});
+        r.emplace("base36", Encoding{"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ", true, {}, "base36"});
+        r.emplace("base39-norwegian", Encoding{"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZÆØÅ", true, {
+                                {U'æ', U'Æ'}, {U'ø', U'Ø'}, {U'å', U'Å'}
+                            }, "base39-norwegian"});
+        r.emplace("base62", Encoding{"0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", false, {}, "base62"});
+        return r;
+    }();
+    return registry;
+}
+
+inline constexpr std::string_view get_version() noexcept {
+    return std::string_view("0.0.0");
+}
+
+} // namespace detail
+
+class UUID {
+ private:
+      unsigned __int128 value_;
+
+ public:
+      UUID() noexcept;
+      explicit UUID(const std::string& val);
+      explicit UUID(unsigned __int128 val) noexcept;
+
+      static uint8_t version(unsigned __int128 val) noexcept;
+      uint8_t version() const noexcept;
+      static uint8_t variant(unsigned __int128 val) noexcept;
+      uint8_t variant() const noexcept;
+      unsigned __int128 get() const noexcept;
+      static std::string_view version_string() noexcept;
+      static bool is_nil(unsigned __int128 val) noexcept;
+      bool is_nil() const noexcept;
+
+      bool operator==(const UUID& other) const noexcept;
+      bool operator!=(const UUID& other) const noexcept;
+
+      static std::string to_string(unsigned __int128 val);
+      std::string to_string() const;
+      static std::vector<uint8_t> to_base(unsigned __int128 val, int base);
+      std::vector<uint8_t> to_base(int base) const;
+      static std::string to_base_string(unsigned __int128 val, int base);
+      std::string to_base_string(int base) const;
+      static std::string to_base_string(unsigned __int128 val, const std::string& encoding_id);
+      std::string to_base_string(const std::string& encoding_id) const;
+
+      static UUID from_base_string(const std::string& s, int base);
+      static UUID from_base_string(const std::string& s, const std::string& encoding_id);
+      static UUID parse(const std::string& s, bool use_heuristics = false, const std::string& default_encoding = "");
+
+      static std::array<uint8_t, 16> to_bytes(unsigned __int128 val) noexcept;
+      std::array<uint8_t, 16> to_bytes() const noexcept;
+};
+
+inline UUID::UUID() noexcept : value_(0) {}
+
+inline UUID::UUID(unsigned __int128 val) noexcept : value_(val) {}
+
+inline UUID::UUID(const std::string& val) : value_(0) {
+    size_t len = val.length();
+    if (len != 36 && len != 32) {
+        return;
+    }
+
+    unsigned __int128 res = 0;
+    for (size_t i = 0; i < len; ++i) {
+        char c = val[i];
+        if (len == 36 && (i == 8 || i == 13 || i == 18 || i == 23)) {
+            if (c != '-') return;
+            continue;
+        }
+
+        int hex_val = 0;
+        if (c >= '0' && c <= '9') hex_val = c - '0';
+        else if (c >= 'a' && c <= 'f') hex_val = c - 'a' + 10;
+        else if (c >= 'A' && c <= 'F') hex_val = c - 'A' + 10;
+        else return;
+
+        res = (res << 4) | (hex_val & 0xf);
+    }
+    value_ = res;
+}
+
+inline uint8_t UUID::version(unsigned __int128 val) noexcept {
+    return static_cast<uint8_t>((UUID::to_bytes(val)[6] >> 4) & 0x0F);
+}
+
+inline uint8_t UUID::version() const noexcept {
+    return UUID::version(value_);
+}
+
+inline uint8_t UUID::variant(unsigned __int128 val) noexcept {
+    uint8_t b = UUID::to_bytes(val)[8];
+    if ((b & 0x80) == 0) return 0;
+    if ((b & 0x40) == 0) return 1;
+    if ((b & 0x20) == 0) return 2;
+    return 3;
+}
+
+inline uint8_t UUID::variant() const noexcept {
+    return UUID::variant(value_);
+}
+
+inline unsigned __int128 UUID::get() const noexcept {
+    return value_;
+}
+
+inline std::string_view UUID::version_string() noexcept {
+    return detail::get_version();
+}
+
+inline bool UUID::is_nil(unsigned __int128 val) noexcept {
+    return val == 0;
+}
+
+inline bool UUID::is_nil() const noexcept {
+    return UUID::is_nil(value_);
+}
+
+inline bool UUID::operator==(const UUID& other) const noexcept {
+    return value_ == other.value_;
+}
+
+inline bool UUID::operator!=(const UUID& other) const noexcept {
+    return !(*this == other);
+}
+
+/**
+ * This function triggers one or more memory allocations.
+ */
+inline std::string UUID::to_string(unsigned __int128 val) {
+    static const char* hex_chars = "0123456789abcdef";
+    std::string s;
+    s.reserve(32);
+    auto bytes = UUID::to_bytes(val);
+    for (size_t i = 0; i < 16; ++i) {
+        s += hex_chars[(bytes[i] >> 4) & 0x0f];
+        s += hex_chars[bytes[i] & 0x0f];
+    }
+    return s;
+}
+
+inline std::string UUID::to_string() const {
+    return UUID::to_string(value_);
+}
+
+/**
+ * This function triggers one or more memory allocations.
+ */
+inline std::vector<uint8_t> UUID::to_base(unsigned __int128 val, int base) {
+    if (base < 2 || base > 256) return {};
+    unsigned __int128 n = val;
+    if (n == 0) return {0};
+    std::vector<uint8_t> digits;
+    digits.reserve(128);
+    while (n > 0) {
+        digits.push_back(static_cast<uint8_t>(n % static_cast<unsigned __int128>(base)));
+        n /= base;
+    }
+    std::ranges::reverse(digits);
+    return digits;
+}
+
+inline std::vector<uint8_t> UUID::to_base(int base) const {
+    return UUID::to_base(value_, base);
+}
+
+/**
+ * This function triggers one or more memory allocations.
+ */
+inline std::string UUID::to_base_string(unsigned __int128 val, int base) {
+    if (base < 2 || base > 64) return "";
+    static constexpr std::string_view chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/";
+
+    unsigned __int128 n = val;
+    if (n == 0) return "0";
+    char buffer[128];
+    int i = 128;
+    while (n > 0) {
+        buffer[--i] = chars[static_cast<size_t>(n % static_cast<unsigned __int128>(base))];
+        n /= base;
+    }
+    return std::string(&buffer[i], 128 - i);
+}
+
+inline std::string UUID::to_base_string(int base) const {
+    return UUID::to_base_string(value_, base);
+}
+
+/**
+ * This function triggers one or more memory allocations.
+ */
+inline std::string UUID::to_base_string(unsigned __int128 val, const std::string& encoding_id) {
+    const auto& registry = detail::get_encoding_registry();
+    auto it = registry.find(encoding_id);
+    if (it == registry.end()) return "";
+
+    std::vector<char32_t> cp_alphabet; // This still allocates, but only once per call
+    std::string_view alpha_view = it->second.alphabet;
+    while (!alpha_view.empty()) {
+        auto [cp, consumed] = detail::next_cp(alpha_view);
+        cp_alphabet.push_back(cp);
+        alpha_view.remove_prefix(consumed);
+    }
+
+    unsigned __int128 n = val;
+    if (n == 0) {
+        std::string s;
+        detail::append_cp_utf8(s, cp_alphabet[0]);
+        return s;
+    }
+
+    std::vector<char32_t> result_cps;
+    unsigned __int128 b = static_cast<unsigned __int128>(cp_alphabet.size());
+    while (n > 0) {
+        result_cps.push_back(cp_alphabet[static_cast<size_t>(n % b)]);
+        n /= b;
+    }
+    std::ranges::reverse(result_cps);
+
+    std::string s;
+    for (auto cp : result_cps) detail::append_cp_utf8(s, cp);
+    return s;
+}
+
+inline std::string UUID::to_base_string(const std::string& encoding_id) const {
+    return UUID::to_base_string(value_, encoding_id);
+}
+
+inline UUID UUID::from_base_string(const std::string& s, int base) {
+    if (base < 2 || base > 64) return UUID();
+    static constexpr std::string_view chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz+/";
+    static constexpr unsigned __int128 limit = ~static_cast<unsigned __int128>(0);
+    unsigned __int128 b = static_cast<unsigned __int128>(base);
+    unsigned __int128 val = 0;
+    for (char c : s) {
+        char lookup = (base <= 36) ? detail::to_upper(c) : c;
+        size_t pos = chars.find(lookup);
+        if (pos == std::string::npos || pos >= static_cast<size_t>(base)) return UUID();
+        if (val > (limit - pos) / b) return UUID();
+        val = val * b + static_cast<unsigned __int128>(pos);
+    }
+    return UUID(val);
+}
+
+inline UUID UUID::from_base_string(const std::string& s, const std::string& encoding_id) {
+    const auto& registry = detail::get_encoding_registry();
+    auto it = registry.find(encoding_id);
+    if (it == registry.end()) return UUID();
+    
+    const auto& enc = it->second;
+    unsigned __int128 val = 0;
+    unsigned __int128 b = static_cast<unsigned __int128>(detail::utf8_len(enc.alphabet));
+    static constexpr unsigned __int128 limit = ~static_cast<unsigned __int128>(0);
+    if (b < 2) return UUID();
+
+    std::string_view sv = s;
+    while (!sv.empty()) {
+        auto [cp, consumed] = detail::next_cp(sv);
+        sv.remove_prefix(consumed);
+
+        char32_t target = detail::translate_cp(cp, enc);
+        size_t pos = detail::find_cp_index(enc.alphabet, target);
+        
+        if (pos == std::string::npos) return UUID();
+        if (val > (limit - pos) / b) return UUID();
+        val = val * b + static_cast<unsigned __int128>(pos);
+    }
+    return UUID(val);
+}
+
+/**
+ * This function triggers one or more memory allocations.
+ */
+inline UUID UUID::parse(const std::string& s, bool use_heuristics, const std::string& default_encoding) {
+    if (s.empty()) return UUID();
+    size_t len = s.length();
+    if (len == 36 || len == 32) return UUID(s);
+
+    const auto& registry = detail::get_encoding_registry();
+    std::vector<std::string> candidates;
+    for (const auto& [enc_id, enc] : registry) {
+        size_t b = detail::utf8_len(enc.alphabet);
+        size_t expected_len = static_cast<size_t>(std::ceil(128.0 / std::log2(static_cast<double>(b))));
+        if (len == expected_len) candidates.push_back(std::string(enc_id));
+    }
+
+    if (candidates.empty()) return UUID();
+    if (candidates.size() == 1) return from_base_string(s, candidates[0]);
+
+    if (use_heuristics) {
+        // Heuristic 1: Exclusive characters
+        std::string_view sv = s;
+        while (!sv.empty()) {
+            auto [cp, consumed] = detail::next_cp(sv);
+            sv.remove_prefix(consumed);
+            std::string winner;
+            int count = 0;
+            for (const auto& cand_id : candidates) {
+                auto it = registry.find(cand_id);
+                if (it == registry.end()) continue;
+                
+                const auto& enc = it->second;
+                char32_t target = detail::translate_cp(cp, enc);
+                if (detail::find_cp_index(enc.alphabet, target) != std::string::npos) {
+                    winner = cand_id;
+                    count++;
+                }
+            }
+            if (count == 1) return from_base_string(s, winner);
+        }
+
+        // Heuristic 2: Overflow/High-bit check
+        std::vector<std::string> valid;
+        std::ranges::copy_if(candidates, std::back_inserter(valid), [&s](const std::string& cand_id) {
+            return !UUID::from_base_string(s, cand_id).is_nil();
+        });
+        if (valid.size() == 1) return from_base_string(s, valid[0]);
+        if (!valid.empty()) candidates = valid;
+    }
+
+    if (!default_encoding.empty()) {
+        auto it = std::find_if(candidates.begin(), candidates.end(),
+                              [&default_encoding](const std::string& cid) { return cid == default_encoding; });
+        if (it != candidates.end()) return from_base_string(s, *it);
+    }
+
+    return UUID();
+}
+
+inline std::array<uint8_t, 16> UUID::to_bytes(unsigned __int128 val) noexcept {
+    std::array<uint8_t, 16> bytes;
+    for (int i = 0; i < 16; ++i) {
+        bytes[i] = static_cast<uint8_t>((val >> (8 * (15 - i))) & 0xFF);
+    }
+    return bytes;
+}
+
+inline std::array<uint8_t, 16> UUID::to_bytes() const noexcept {
+    return UUID::to_bytes(value_);
+}
+
+}  // namespace uuid_ext
+
+#endif // UUID_EXT_HPP

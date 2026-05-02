@@ -1,0 +1,15 @@
+#!/bin/sh
+# Pre-commit hook to synchronize versioning and build the header
+
+echo "Running pre-commit version sync and tests..."
+
+# 1. Trigger CMake to re-run the configuration and header generation
+cmake -B build . > /dev/null
+
+# 2. Build and run tests to ensure the header is valid
+cmake --build build --target uuid_test > /dev/null
+ctest --test-dir build --output-on-failure
+
+# 3. Stage the newly generated header if it was changed
+git add include/uuid_ext/uuid_ext.hpp
+exit 0

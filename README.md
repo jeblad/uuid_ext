@@ -1,84 +1,104 @@
 # uuid_ext
-A portable C++11 library for handling, formatting, and heuristically parsing UUIDs.
+
+**uuid_ext is a portable, header-only C++20 library for advanced UUID formatting and heuristic parsing.**
 
 ## Overview
-`uuid_ext` provides a `UUID` class backed by an `unsigned __int128` for efficient internal storage. It is designed to bridge the gap between various UUID representations, including standard hyphenated Hex, compact Hex, Base32, Base36, Base62, and Base64.
 
-## Features
-- **Multi-base support**: Convert UUIDs to and from Base16, Base32 (RFC 4648), Base36, Base62, and Base64.
-- **Heuristic Parsing**: A `parse()` method that guesses the encoding based on string length and character content.
-- **Clean API**: Supports introspection (version/variant), byte array export, and comparison operators.
-- **Zero External Dependencies**: Only requires a standard C++11 compiler.
+`uuid_ext` is designed to bridge the gap between standard UUID representations and human-friendly or web-safe formats. It provides an efficient `UUID` container backed by a 128-bit integer (`unsigned __int128`) and includes a powerful heuristic parser capable of identifying encodings based on textual characteristics.
 
-## Heuristic Parsing Logic
-The `parse()` method attempts to identify the format based on the following length-based rules:
-- **32 or 36 chars**: Standard Hex (with or without hyphens).
-- **26 chars**: RFC 4648 Base32.
-- **25 chars**: Base36 (Alphanumeric).
-- **24 chars**: Base36 (Alphanumeric).
-- **22 chars**: Base64 (Unpadded) or Base62.
+### Why use uuid_ext?
 
-## Limitations
-- **Performance**: This library is optimized for flexibility and code clarity rather than extreme throughput. It uses `std::map` and `std::string` operations that may not be suitable for high-frequency inner loops.
-- **Heuristic Ambiguity**: Because parsing is primarily length-based, a string intended to be Base64 that happens to only contain alphanumeric characters might be misidentified as Base36 or Base62. For unambiguous parsing, use `from_base_string()` with a specific encoding ID.
+* **Internationalization (I18n):** Unlike many libraries, `uuid_ext` is fully UTF-8 aware. It supports localized alphabets (e.g., Norwegian `ÆØÅ`) and custom translation tables for case-insensitive processing of non-ASCII characters.
+* **Heuristic Parsing:** The library can guess the format of an incoming string (Hex, Base32, Base36, etc.) based on length and content, simplifying the ingestion of identifiers from various sources.
+* **Environment Safe:** Focuses on alphanumeric-heavy representations that are safe for URLs, Shell commands, and Filenames without requiring complex escaping.
+* **Modern C++:** Zero-dependency, header-only architecture leveraging C++20 ranges and `std::string_view`.
 
-### Why certain encodings are troublesome
-Base64 padding (`=`) and certain special characters (like `+` and `/`) are often problematic in modern software stacks:
-- **URLs and Web**: Characters like `=`, `+`, and `/` have special meanings in URLs. Including them in identifiers requires percent-encoding, which makes the strings longer and harder to read.
-- **Command Line**: Shells often interpret `=` as an assignment or require complex quoting for strings containing symbols, making it difficult to pass identifiers as arguments.
-- **Filenames**: While most filesystems allow these characters, they can interfere with standard CLI tools or path resolution logic.
+## Integration
 
-By focusing on unpadded and "clean" alphanumeric-heavy representations, `uuid_ext` ensures that generated strings are safe for use in filenames, URLs, and terminal commands without additional escaping.
+`uuid_ext` is a single-header library. You can either copy `include/uuid_ext/uuid_ext.hpp` into your project or use the provided CMake interface:
 
-## Usage
+```cmake
+# Add the directory to your include paths
+target_link_libraries(your_project PRIVATE uuid_ext)
+```
+
+## 3. Usage
+
 ```cpp
-#include "uuid_ext/uuid.hpp"
+#include "uuid_ext/uuid_ext.hpp"
 #include <iostream>
 
 int main() {
     using uuid_ext::UUID;
 
-    // Create a UUID from a standard hex string
+    // 1. Create from standard hex
     UUID u1("550e8400-e29b-41d4-a716-446655440000");
 
-    // Heuristically parse various formats (Hex, Base32, Base36, Base64)
-    // This identifies the format based on the string length.
-    UUID u2 = UUID::parse("17Y9G6X8W4Q2Z0V4B8N6M4L2K"); // Base36
+    // 2. Heuristically parse unknown formats (e.g., Base36)
+    UUID u2 = UUID::parse("17Y9G6X8W4Q2Z0V4B8N6M4L2K");
 
-    // Convert to different representations
-    std::cout << "Standard: " << u1.to_string() << std::endl;
-    std::cout << "Base36:   " << u1.to_base_string("base36") << std::endl;
-    std::cout << "Base64:   " << u1.to_base_string("rfc4648-4") << std::endl;
-
-    // Check properties
-    std::cout << "Version: " << (int)u1.version() << std::endl;
-
-    // Comparison
-    if (u1 != u2) {
-        std::cout << "UUIDs are different" << std::endl;
-    }
+    // 3. Convert to specialized encodings
+    std::cout << "Base36: " << u1.to_base_string("base36") << "\n";
+    std::cout << "Base62: " << u1.to_base_string("base62") << "\n";
 
     return 0;
 }
 ```
 
-## Building and testing
+## Algorithm Overview
+
+The library is built around a few core algorithmic principles to ensure high-fidelity conversion and robust parsing:
+
+* **128-bit Integer Math:** The core storage uses `unsigned __int128`. All base conversions (Base36, Base62, etc.) are performed using successive division and modulo operations on this 128-bit value, treating the UUID as a single big-endian integer.
++* **Heuristic Classification:** The `parse()` method implements a prioritized decision tree based on input length. It attempts to classify strings into formats like RFC 4648 Base32 (26 characters), Base36 (24-25 characters), or Base64/Base62 (22 characters).
+* **UTF-8 Decoding:** Unlike byte-oriented libraries, `uuid_ext` includes a lightweight UTF-8 decoder. It processes input strings as 32-bit Unicode code points. This allows the library to treat multibyte characters (like `Æ` or `Å`) as single semantic units during both encoding and decoding.
+* **Translation Mapping:** Before a character is looked up in an encoding's alphabet, it passes through a translation layer. This layer handles custom case-folding and character aliasing (e.g., mapping `æ` to `Æ` for a Norwegian-based identifier), allowing the library to remain robust against inconsistent human input or varied linguistic rules.
+
+This layer handles custom case-folding and character aliasing (e.g., mapping æ to Æ for a Norwegian-based identifier), allowing the library to remain robust against inconsistent human input or varied linguistic rules.
+
+## Technical Deep Dive
+
+### Memory and Exceptions
+
+`uuid_ext` is designed for general-purpose C++ applications. Please note the following regarding its operational profile:
+
+* **Heap Allocation:** Several methods (like `parse`, `to_string`, and base conversions) utilize STL containers such as `std::string` and `std::vector`. These trigger dynamic memory allocations on the heap.
+* **Exception Safety:** While the library avoids explicit `throw` statements for logic errors, it is **not** `noexcept`. It relies on the STL, which may throw `std::bad_alloc` if memory is exhausted. It is the caller's responsibility to handle this, if operating in memory-constrained environments.
+* **Static Registry:** The encoding registry uses a `std::map` initialized on the first call, which involves one-time heap allocations.
+
+### Heuristic Parsing Logic
+
+The parse() method attempts to identify the format based on the following length-based rules:
+
+* 32 or 36 characters: Standard Hex (with or without hyphens).
+* 26 characters: RFC 4648 Base32.
+* 24 or 25 characters: Base36 (Alphanumeric).
+* 22 characters: Base64 (Unpadded) or Base62.
+
+### UTF-8 & Custom Encodings
+
+`uuid_ext` processes strings as Unicode code points, not raw bytes. This allows for identifiers using localized alphabets.
+
+* Translation Tables: Encodings can define a translations map to handle characters without standard ASCII equivalents (e.g., mapping lowercase æ to uppercase Æ in a numeric context).
+* Example: Base-39-norwegian: This built-in encoding extends the alphanumeric set with Æ, Ø, and Å. It is ideal for systems requiring verbal command robustness in Norwegian contexts.
+
+## Building and Testing
+
 This project uses CMake for its build system.
 
 ```bash
 cmake -B build
 cmake --build build
-build/
 ```
 
 To run the included unit tests, use CTest after building:
 
 ```bash
-cd build
-( cd build ; ctest --verbose )
+ctest --test-dir build
 ```
 
 ## License
+
 This project is licensed under the **GNU General Public License v3.0**. See the `LICENSE` file for details.
 
 ## Acknowledgements

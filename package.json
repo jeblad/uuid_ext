@@ -1,0 +1,12 @@
+{
+  "name": "uuid_ext",
+  "version": "0.0.0",
+  "license": "GPL-3.0-only",
+  "private": true,
+  "devDependencies": {
+    "commit-and-tag-version": "^12.7.1"
+  },
+  "scripts": {
+    "release": "commit-and-tag-version"
+  }
+}

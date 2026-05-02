@@ -1,0 +1,3 @@
+# Exclude the generated header from AI editing to prevent loss of manual changes
+
+include/uuid_ext/uuid_ext.hpp
