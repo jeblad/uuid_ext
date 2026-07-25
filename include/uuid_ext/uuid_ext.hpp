@@ -1,6 +1,6 @@
 /**
  * uuid_ext – A portable UUID extension library
- * Version 0.0.0
+ * Version 0.0.4
  *
  * Copyright © 2026 John Erling Blad
  *
@@ -165,7 +165,7 @@ inline const std::map<std::string, Encoding>& get_encoding_registry() {
 }
 
 inline constexpr std::string_view get_version() noexcept {
-    return std::string_view("0.0.0");
+    return std::string_view("0.0.4");
 }
 
 } // namespace detail
