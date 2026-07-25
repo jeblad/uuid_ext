@@ -1,5 +1,10 @@
-cmake_minimum_required(VERSION 3.14)
-project(uuid_ext VERSION 0.0.4)
+cmake_minimum_required(VERSION 3.19)
+
+# Read version from package.json
+file(READ "${CMAKE_CURRENT_SOURCE_DIR}/package.json" PACKAGE_JSON_CONTENT)
+string(JSON PROJECT_VERSION_FROM_PACKAGE_JSON GET "${PACKAGE_JSON_CONTENT}" "version")
+
+project(uuid_ext VERSION ${PROJECT_VERSION_FROM_PACKAGE_JSON})
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
